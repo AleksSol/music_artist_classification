@@ -1,5 +1,7 @@
 from typing import Mapping
 import numpy as np
+import librosa
+import os
 from .mel_extractor import MelExtractor
 
 
@@ -14,6 +16,9 @@ class DataHolder:
         """
         self.random_state = random_state
         self.extractor = MelExtractor(**kwargs)
+        self.sr = kwargs["sr"]
+        self.artists_codes = {}
+        self.dataset = {}
         # TODO inner structure of DataHolder
 
     def process_folder(self, folder: str) -> None:
@@ -23,7 +28,29 @@ class DataHolder:
         :param folder: path to folder with format folder/artist/album/*.mp3
         :return:
         """
-        pass
+
+        with os.scandir(folder) as root:
+            artist_num = 0
+            for entry in root:
+                if entry.is_dir():
+                    artist_name = entry.name
+                    self.artists_codes[artist_name] = artist_num
+                    artist_num += 1
+                    self.dataset[artist_name] = {}
+
+                    with os.scandir(entry.path) as artist_folder:
+                        for inner_entry in artist_folder:
+                            if inner_entry.is_dir():
+                                album_name = inner_entry.name
+                                self.dataset[artist_name][album_name] = []
+
+                                with os.scandir(inner_entry.path) as album_foder:
+                                    for song in album_foder:
+                                        if not song.name.startswith('.') and song.is_file():
+                                            song_raw, _ = librosa.load(song.path, sr=self.sr)
+                                            self.dataset[artist_name][album_name].append((song_raw,
+                                                                                          self.artists_codes[artist_name],
+                                                                                          song.name))
 
     def save_dataset(self, dump_path: str = 'dataset') -> None:
         """
@@ -87,7 +114,7 @@ class DataHolder:
 
         :return: dict with keys 'train', 'validation', 'test' and values (X, Y, names)
         X - np.array(shape=[samples, mel_len, slice_length)
-        Y - np.array(shape=[samples,]) - str
+        Y - np.array(shape=[samples,]) - int
         names - names of songs
         """
 
