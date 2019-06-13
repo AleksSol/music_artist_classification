@@ -2,7 +2,10 @@ from typing import Mapping
 import numpy as np
 import librosa
 import os
+import pickle
 from .mel_extractor import MelExtractor
+
+from tqdm import tqdm
 
 
 class DataHolder:
@@ -31,7 +34,7 @@ class DataHolder:
 
         with os.scandir(folder) as root:
             artist_num = 0
-            for entry in root:
+            for entry in tqdm(root):
                 if entry.is_dir():
                     artist_name = entry.name
                     self.artists_codes[artist_name] = artist_num
@@ -48,9 +51,14 @@ class DataHolder:
                                     for song in album_foder:
                                         if not song.name.startswith('.') and song.is_file():
                                             song_raw, _ = librosa.load(song.path, sr=self.sr)
-                                            self.dataset[artist_name][album_name].append((song_raw,
+                                            song_mel = self.extractor.transform(song_raw)
+                                            self.dataset[artist_name][album_name].append((song_mel,
                                                                                           self.artists_codes[artist_name],
                                                                                           song.name))
+
+                                            del song_raw
+                                            del song_mel
+
 
     def save_dataset(self, dump_path: str = 'dataset') -> None:
         """
@@ -60,6 +68,10 @@ class DataHolder:
         :return:
         """
         # TODO chose library to dump data (pickle, dill, json, etc)
+        with open(dump_path, "wb") as f_out:
+            pickle.dump((self.dataset, self.artists_codes), f_out)
+
+        return
 
     def load_dataset(self, dump_path: str = 'dataset') -> None:
         """
@@ -68,6 +80,10 @@ class DataHolder:
         :param dump_path: path to file
         :return:
         """
+        with open(dump_path, "rb") as f_in:
+            self.dataset, self.artists_codes = pickle.load(f_in)
+
+        return
 
     def _slice_spectrogram(self, mel: np.array, slice_length: int = 900, overlap: int = 100) -> np.array:
         """
