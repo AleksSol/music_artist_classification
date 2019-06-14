@@ -120,7 +120,7 @@ class DataHolder:
 
         return np.array(sliced_spectrogram)
 
-    def _build_sliced_set(self, songs, slice_length: int = 900, overlap: int = 100):
+    def _build_sliced_set(self, songs=None, albums=None, slice_length: int = 900, overlap: int = 100):
         """
         Build a set of sliced spectrograms
 
@@ -137,18 +137,34 @@ class DataHolder:
         set_artists = []
         set_names = []
 
-        for song in songs:
-            artist = self.songs_artists[song]
-            album = self.songs_albums[song]
-            data = self.dataset[artist][album][self.songs_num_in_album[song]]
-            sliced_mel = self._slice_spectrogram(data[0], slice_length=slice_length, overlap=overlap)
+        if songs is not None:
+            for song in songs:
+                artist = self.songs_artists[song]
+                album = self.songs_albums[song]
+                data = self.dataset[artist][album][self.songs_num_in_album[song]]
+                sliced_mel = self._slice_spectrogram(data[0], slice_length=slice_length, overlap=overlap)
 
-            num_of_parts = sliced_mel.shape[0]
+                num_of_parts = sliced_mel.shape[0]
 
-            if num_of_parts != 0: # Throw out songs shorter than one window
-                sliced_set.append(sliced_mel)
-                set_artists += [data[1]] * num_of_parts
-                set_names += [data[2]] * num_of_parts
+                if num_of_parts != 0: # Throw out songs shorter than one window
+                    sliced_set.append(sliced_mel)
+                    set_artists += [data[1]] * num_of_parts
+                    set_names += [data[2]] * num_of_parts
+
+        elif albums is not None:
+            for artist in albums:
+                for album in albums[artist]:
+                    for song_data in self.dataset[artist][album]:
+                        sliced_mel = self._slice_spectrogram(song_data[0], slice_length=slice_length, overlap=overlap)
+
+                        num_of_parts = sliced_mel.shape[0]
+
+                        if num_of_parts != 0:  # Throw out songs shorter than one window
+                            sliced_set.append(sliced_mel)
+                            set_artists += [song_data[1]] * num_of_parts
+                            set_names += [song_data[2]] * num_of_parts
+        else:
+            print("Songs and albums arguments are not None simultaneously!") # ??
 
         sliced_set = np.concatenate(sliced_set, axis=0)
 
@@ -191,22 +207,22 @@ class DataHolder:
         val_songs = songs_arr[full_train_indices][val_indices]
         test_songs = songs_arr[test_indices]
 
-        train_set = self._build_sliced_set(train_songs, slice_length=slice_length, overlap=overlap)
-        val_set = self._build_sliced_set(val_songs, slice_length=slice_length, overlap=overlap)
-        test_set = self._build_sliced_set(test_songs, slice_length=slice_length, overlap=overlap)
+        train_set = self._build_sliced_set(songs=train_songs, albums=None, slice_length=slice_length, overlap=overlap)
+        val_set = self._build_sliced_set(songs=val_songs, albums=None, slice_length=slice_length, overlap=overlap)
+        test_set = self._build_sliced_set(songs=test_songs, albums=None, slice_length=slice_length, overlap=overlap)
 
         return {"train": train_set, "validation": val_set, "test": test_set}
 
     def get_album_split(self,
-                        test_size: float = 0.1,
-                        val_size: float = 0.1,
+                        test_albums_num: int = 1,
+                        val_albums_num: int = 1,
                         slice_length: int = 900,
                         overlap: int = 100) -> Mapping[str, tuple]:
         """
-        Return song based split of data
+        Return album based split of data
 
-        :param test_size: fraction of test data
-        :param val_size: fraction of train data
+        :param test_albums_num: number of albums in test for each artist
+        :param val_albums_num: number of albums in validation for each artist
         :param slice_length: length of one slice
         :param overlap: overlap length
 
@@ -216,6 +232,30 @@ class DataHolder:
         names - names of songs
         """
 
+        np.random.seed(self.random_state) ################ ??????
+
+        train_albums_dict = {}
+        val_albums_dict = {}
+        test_albums_dict = {}
+
+        for artist in self.dataset.keys():
+            albums = np.array(list(self.dataset[artist].keys()))
+            num_of_albums = albums.shape[0]
+            special_numbers = np.random.permutation(num_of_albums)
+            train_numbers = special_numbers[val_albums_num + test_albums_num:]
+            val_numbers = special_numbers[:val_albums_num]
+            test_numbers = special_numbers[val_albums_num: val_albums_num + test_albums_num]
+
+            train_albums_dict[artist] = albums[train_numbers]
+            val_albums_dict[artist] = albums[val_numbers]
+            test_albums_dict[artist] = albums[test_numbers]
+
+        train_set = self._build_sliced_set(albums=train_albums_dict, slice_length=slice_length, overlap=overlap)
+        val_set = self._build_sliced_set(albums=val_albums_dict, slice_length=slice_length, overlap=overlap)
+        test_set = self._build_sliced_set(albums=test_albums_dict, slice_length=slice_length, overlap=overlap)
+
+        return {"train": train_set, "validation": val_set, "test": test_set}
+
     @property
     def song_to_album(self) -> Mapping[str, str]:
         """
@@ -223,13 +263,4 @@ class DataHolder:
         :return: mapping from song name to album name
         """
 
-        ## ??
-        return {}
-
-        # song_album_map = {}
-        #
-        # for artist in self.dataset.keys():
-        #     for album in self.dataset[artist].keys():
-        #         for song_info in self.dataset[artist][album]:
-        #             song_album_map[song_info[2]] = album
-        # return song_album_map
+        return self.songs_albums
