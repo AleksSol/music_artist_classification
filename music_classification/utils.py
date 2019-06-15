@@ -1,4 +1,15 @@
 from typing import Mapping
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import torch.backends.cudnn as cudnn
+
+from torch.utils.data import DataLoader, TensorDataset
+from torchtools.trainer import Trainer
+from torchtools.meters import LossMeter, AccuracyMeter
+from torchtools.callbacks import TensorBoardLogger, CSVLogger, ModelCheckPoint, EarlyStopping
+
 
 
 def train_epoch():
@@ -12,7 +23,10 @@ def train_model(model,
                 batch_size: int = 32,
                 random_state: int = 13,
                 dump_iter: int = 5,
-                save_dir: str = './res') -> dict:
+                save_dir: str = './res',
+                n_epochs: int = 100,
+                learning_rate: float = 1e-4,
+                device: str='cuda') -> dict:
     """
     Train model
     
@@ -27,6 +41,9 @@ def train_model(model,
     :param random_state: random state for torch, numpy
     :param dump_iter: number of iters between dump of models weights
     :param save_dir: path to save model weights with format model_{num_iter}.model and model_final.model
+    :param n_epochs: number of epochs to train for
+    :param learning_rate: learning rate for Adam
+    :param device: device to train on e.g. 'cpu' or 'cuda' or 'cuda:n'
     :return:
 
     dict with keys:
@@ -37,4 +54,50 @@ def train_model(model,
     # TODO add other arguments(reccomended to add only with default values)
     # TODO choose tensorboard(erase losses from return) or not
     # TODO add arguments to
-    pass
+
+    torch.manual_seed(random_state)
+
+    if 'cuda' in device:
+        torch.cuda.manual_seed(random_state)
+        cudnn.benchmark = True
+
+    dev = torch.device(device)
+    model.to(dev)
+    
+    def make_dataset_and_loader(data, shuffle=True):
+        X, y = [torch.from_numpy(t) for t in data[:2]]
+        X = X.unsqueeze(dim=1).type(torch.float32)
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        return dataset, loader
+
+    train_set, train_loader = make_dataset_and_loader(data['train'])
+    val_set, val_loader = make_dataset_and_loader(data['validation'], shuffle=False)
+    test_set, test_loader = make_dataset_and_loader(data['test'], shuffle=False)
+
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = nn.CrossEntropyLoss()
+
+    trainer = Trainer(model, train_loader, criterion, optimizer, val_loader, test_loader, device=dev)
+    loss, val_loss = LossMeter('loss'), LossMeter('val_loss')
+    acc, val_acc = AccuracyMeter('acc'), AccuracyMeter('val_acc')
+
+    logger = TensorBoardLogger()
+    csv_logger = CSVLogger(keys=['epochs', 'loss', 'acc', 'val_loss', 'val_acc'])
+    checkpoint = ModelCheckPoint(save_dir, fname='model_{epochs:03d}.model', save_best_only=False)
+    early_stop = EarlyStopping(monitor='val_loss', patience=10, mode='auto')
+
+    hooks = [loss, val_loss, acc, val_acc, logger, csv_logger, checkpoint, early_stop]
+    trainer.register_hooks(hooks)
+
+    res = trainer.train(n_epochs)
+
+    return dict(
+        model=model,
+        train_score=res['meters']['acc'].values,
+        val_score=res['meters']['val_acc'].values,
+        test_score=None, #res['meters']['test_acc']
+        train_losses=res['meters']['loss'].values,
+        val_losses=res['meters']['val_loss'].values,
+        test_losses=None #res['meters']['test_loss'],
+    )
