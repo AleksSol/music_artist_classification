@@ -8,10 +8,11 @@ class CRNN(nn.Module):
     Convolutional Recurrent Neural Network for song-based artist recognition.
     """
 
-    def __init__(self, freq_dim, time_dim, channel_dim, num_classes, filter_sizes=(64, 128, 128, 128), pool_sizes=[(2, 2), (4, 2), (4, 2), (4, 2)]):
+    def __init__(self, freq_dim, channel_dim, num_classes,
+                       filter_sizes=(64, 128, 128, 128), 
+                       pool_sizes=((2, 2), (4, 2), (4, 2), (4, 2))):
         """
         :param freq_dim: size of frequency dimension
-        :param time_dim: size of time dimension
         :param channel_dim: number of channels (usually 1)
         :param num_classes: number of artists
         :param filter_sizes: sizes of convolutional filters
