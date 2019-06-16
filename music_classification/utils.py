@@ -1,4 +1,8 @@
 from typing import Mapping
+
+import numpy as np
+import pandas as pd
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,10 +23,8 @@ def train_epoch():
 
 def train_model(model,
                 data: Mapping[str, tuple],
-                verbose: bool = True,
                 batch_size: int = 32,
                 random_state: int = 13,
-                dump_iter: int = 5,
                 save_dir: str = './res',
                 n_epochs: int = 100,
                 learning_rate: float = 1e-4,
@@ -36,10 +38,8 @@ def train_model(model,
         X - np.array(shape=[samples, mel_len, slice_length)
         Y - np.array(shape=[samples,]) - str
         names - names of songs
-    :param verbose: verbose
     :param batch_size: size of batch
     :param random_state: random state for torch, numpy
-    :param dump_iter: number of iters between dump of models weights
     :param save_dir: path to save model weights with format model_{num_iter}.model and model_final.model
     :param n_epochs: number of epochs to train for
     :param learning_rate: learning rate for Adam
@@ -51,9 +51,6 @@ def train_model(model,
     'val_score', 'train_score', 'test_score' - validation, train and test scores, float
     'train_losses', 'val_losses', 'test_losses' - losses on each epoch, list
     """
-    # TODO add other arguments(reccomended to add only with default values)
-    # TODO choose tensorboard(erase losses from return) or not
-    # TODO add arguments to
 
     torch.manual_seed(random_state)
 
@@ -92,12 +89,12 @@ def train_model(model,
 
     res = trainer.train(n_epochs)
 
+    logs = pd.read_csv(csv_logger.fpath)
+
     return dict(
         model=model,
-        train_score=res['meters']['acc'].values,
-        val_score=res['meters']['val_acc'].values,
-        test_score=None, #res['meters']['test_acc']
-        train_losses=res['meters']['loss'].values,
-        val_losses=res['meters']['val_loss'].values,
-        test_losses=None #res['meters']['test_loss'],
+        train_score=res['meters']['acc'].value,
+        val_score=res['meters']['val_acc'].value,
+        train_losses=np.array(logs['loss']),
+        val_losses=np.array(logs['val_loss'])
     )
