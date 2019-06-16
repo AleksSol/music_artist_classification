@@ -8,3 +8,8 @@ profile_default/
 ipython_config.py
 
 venv
+
+data/
+runs/
+logs/
+res/
