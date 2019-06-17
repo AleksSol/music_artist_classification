@@ -13,7 +13,15 @@ from torch.utils.data import DataLoader, TensorDataset
 from torchtools.trainer import Trainer
 from torchtools.meters import LossMeter, AccuracyMeter
 from torchtools.callbacks import TensorBoardLogger, CSVLogger, ModelCheckPoint, EarlyStopping
+from torchtools.exceptions import EarlyStoppingException
 
+
+class EarlyStoppingNoRaise(EarlyStopping):
+    def on_epoch_end(self, trainer, state):
+        try:
+            super(EarlyStoppingNoRaise, self).on_epoch_end(trainer, state)
+        except EarlyStoppingException:
+            trainer.exit()
 
 
 def train_epoch():
@@ -82,19 +90,18 @@ def train_model(model,
     logger = TensorBoardLogger()
     csv_logger = CSVLogger(keys=['epochs', 'loss', 'acc', 'val_loss', 'val_acc'])
     checkpoint = ModelCheckPoint(save_dir, fname='model_{epochs:03d}.model', save_best_only=False)
-    early_stop = EarlyStopping(monitor='val_loss', patience=10, mode='auto')
+    early_stop = EarlyStoppingNoRaise(monitor='val_loss', patience=10, mode='auto')
 
     hooks = [loss, val_loss, acc, val_acc, logger, csv_logger, checkpoint, early_stop]
     trainer.register_hooks(hooks)
 
-    res = trainer.train(n_epochs)
-
+    trainer.train(n_epochs)
     logs = pd.read_csv(csv_logger.fpath)
 
     return dict(
         model=model,
-        train_score=res['meters']['acc'].value,
-        val_score=res['meters']['val_acc'].value,
+        train_score=np.array(logs['acc'])[-1],
+        val_score=np.array(logs['val_acc'])[-1],
         train_losses=np.array(logs['loss']),
         val_losses=np.array(logs['val_loss'])
     )
