@@ -56,7 +56,7 @@ def train_model(model,
 
     if 'cuda' in device:
         torch.cuda.manual_seed(random_state)
-        cudnn.benchmark = True
+        #cudnn.benchmark = True
 
     dev = torch.device(device)
     model.to(dev)

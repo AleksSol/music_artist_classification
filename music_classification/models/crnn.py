@@ -69,3 +69,22 @@ class CRNN(nn.Module):
 
         z = self.output(z[-1])
         return z
+    
+    def get_representation(self, x):
+        """
+        :param x: tensor of shape (batch_size, channel_dim, freq_dim, time_dim)
+        :return: vector inner representation of x
+        """
+
+        z = x.transpose(2, 1)
+        z = self.bn_freq(z)
+        z = z.transpose(2, 1)
+
+        z = self.conv(z)
+        z = z.permute(3, 0, 1, 2)
+        z = z.view(z.shape[0], z.shape[1], -1)
+
+        for gru in self.gru:
+            z, _ = gru(z)
+
+        return z[-1]
