@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class CRNN(nn.Module):
@@ -55,18 +53,9 @@ class CRNN(nn.Module):
         :return: logits of classes (to use with nn.CrossEntropyLoss)
         """
 
-        z = x.transpose(2, 1)
-        z = self.bn_freq(z)
-        z = z.transpose(2, 1)
+        z = self.get_representation(x)
+        z = self.output(z)
 
-        z = self.conv(z)
-        z = z.permute(3, 0, 1, 2)
-        z = z.view(z.shape[0], z.shape[1], -1)
-
-        for gru in self.gru:
-            z, _ = gru(z)
-
-        z = self.output(z[-1])
         return z
 
     def get_representation(self, x):
