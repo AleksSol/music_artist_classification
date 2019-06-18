@@ -1,10 +1,12 @@
-from typing import Mapping
-import numpy as np
-import librosa
 import os
 import pickle
-from .mel_extractor import MelExtractor
+from typing import Mapping
+
+import librosa
+import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
+
+from .mel_extractor import MelExtractor
 
 
 class DataHolder:
@@ -200,8 +202,13 @@ class DataHolder:
         songs_arr = np.array([song for song, artist in songs_artists_items])
         artists_arr = np.array([artist for song, artist in songs_artists_items])
 
+        full_train_indices = []
+        train_indices = []
+        val_indices = []
+        test_indices = []
+
         for full_train_indices, test_indices in stratified_split_test.split(songs_arr, artists_arr):
-            for train_indices, val_indices in\
+            for train_indices, val_indices in \
                     stratified_split_val.split(songs_arr[full_train_indices], artists_arr[full_train_indices]):
                 break
             break

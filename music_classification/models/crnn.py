@@ -9,8 +9,8 @@ class CRNN(nn.Module):
     """
 
     def __init__(self, freq_dim, channel_dim, num_classes,
-                       filter_sizes=(64, 128, 128, 128), 
-                       pool_sizes=((2, 2), (4, 2), (4, 2), (4, 2))):
+                 filter_sizes=(64, 128, 128, 128),
+                 pool_sizes=((2, 2), (4, 2), (4, 2), (4, 2))):
         """
         :param freq_dim: size of frequency dimension
         :param channel_dim: number of channels (usually 1)
@@ -49,7 +49,6 @@ class CRNN(nn.Module):
             nn.Linear(32, num_classes)
         )
 
-
     def forward(self, x):
         """
         :param x: tensor of shape (batch_size, channel_dim, freq_dim, time_dim)
@@ -69,7 +68,7 @@ class CRNN(nn.Module):
 
         z = self.output(z[-1])
         return z
-    
+
     def get_representation(self, x):
         """
         :param x: tensor of shape (batch_size, channel_dim, freq_dim, time_dim)

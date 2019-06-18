@@ -2,18 +2,14 @@ from typing import Mapping
 
 import numpy as np
 import pandas as pd
-
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
-
 from torch.utils.data import DataLoader, TensorDataset
-from torchtools.trainer import Trainer
-from torchtools.meters import LossMeter, AccuracyMeter
 from torchtools.callbacks import TensorBoardLogger, CSVLogger, ModelCheckPoint, EarlyStopping
 from torchtools.exceptions import EarlyStoppingException
+from torchtools.meters import LossMeter, AccuracyMeter
+from torchtools.trainer import Trainer
 
 
 class EarlyStoppingNoRaise(EarlyStopping):
@@ -24,11 +20,6 @@ class EarlyStoppingNoRaise(EarlyStopping):
             trainer.exit()
 
 
-def train_epoch():
-    # TODO this function realization depends on train_model only
-    pass
-
-
 def train_model(model,
                 data: Mapping[str, tuple],
                 batch_size: int = 32,
@@ -36,7 +27,7 @@ def train_model(model,
                 save_dir: str = './res',
                 n_epochs: int = 100,
                 learning_rate: float = 1e-4,
-                device: str='cuda') -> dict:
+                device: str = 'cuda') -> dict:
     """
     Train model
     
@@ -64,11 +55,10 @@ def train_model(model,
 
     if 'cuda' in device:
         torch.cuda.manual_seed(random_state)
-        #cudnn.benchmark = True
 
     dev = torch.device(device)
     model.to(dev)
-    
+
     def make_dataset_and_loader(data, shuffle=True):
         X, y = [torch.from_numpy(t) for t in data[:2]]
         X = X.unsqueeze(dim=1).type(torch.float32)
