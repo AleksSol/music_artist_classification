@@ -8,7 +8,7 @@ class MelExtractor:
     """
 
     def __init__(self,
-                 sr: int = 16000, # 16 * 1024?
+                 sr: int = 16000,
                  n_mels: int = 128,
                  n_fft: int = 2048,
                  hop_length: int = 512

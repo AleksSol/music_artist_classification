@@ -10,16 +10,18 @@ from sklearn.model_selection import StratifiedShuffleSplit
 class DataHolder:
     """Class for processing data"""
 
-    def __init__(self, random_state: int = 127, **kwargs):
+    def __init__(self, random_state: int = 127, sr: int = 16000, **kwargs):
         """
 
         :param random_state: random state to splitting data
         :param kwargs: parameters of MelExtractor
         """
+
         self.random_state = random_state
-        self.extractor = MelExtractor(**kwargs)
-        self.sr = kwargs["sr"]
+        self.extractor = MelExtractor(sr=sr, **kwargs)
+        self.sr = sr
         self.artists_codes = {}
+        self.codes_artists = {}
         self.songs_artists = {}
         self.songs_albums = {}
         self.songs_num_in_album = {}
@@ -41,6 +43,7 @@ class DataHolder:
                 if entry.is_dir():
                     artist_name = entry.name
                     self.artists_codes[artist_name] = artist_num
+                    self.codes_artists[artist_num] = artist_name
                     artist_num += 1
                     self.dataset[artist_name] = {}
 
@@ -53,7 +56,8 @@ class DataHolder:
                                 with os.scandir(inner_entry.path) as album_folder:
                                     num_in_album = 0
                                     for song in album_folder:
-                                        if not song.name.startswith('.') and song.is_file():
+                                        if not song.name.startswith('.') and song.is_file() and song.name.endswith(
+                                                ".mp3"):
                                             self.songs_artists[song.name] = artist_name
                                             self.songs_albums[song.name] = album_name
                                             song_code = len(self.songs_codes) + 1
@@ -65,12 +69,8 @@ class DataHolder:
                                             song_raw, _ = librosa.load(song.path, sr=self.sr)
                                             song_mel = self.extractor.transform(song_raw)
                                             self.dataset[artist_name][album_name].append((song_mel,
-                                                                                          self.artists_codes[artist_name],
-                                                                                          song.name))
-
-                                            del song_raw
-                                            del song_mel
-
+                                                                                          self.artists_codes[
+                                                                                              artist_name], song.name))
 
     def save_dataset(self, dump_path: str = 'dataset') -> None:
         """
@@ -79,9 +79,9 @@ class DataHolder:
         :param dump_path: path to file
         :return:
         """
-        # TODO chose library to dump data (pickle, dill, json, etc)
+
         with open(dump_path, "wb") as f_out:
-            pickle.dump((self.dataset, self.artists_codes, self.songs_artists, self.songs_albums,
+            pickle.dump((self.dataset, self.artists_codes, self.codes_artists, self.songs_artists, self.songs_albums,
                          self.songs_num_in_album, self.songs_codes, self.codes_songs), f_out)
 
         return
@@ -94,12 +94,13 @@ class DataHolder:
         :return:
         """
         with open(dump_path, "rb") as f_in:
-            (self.dataset, self.artists_codes, self.songs_artists, self.songs_albums, self.songs_num_in_album,
-             self.songs_codes, self.codes_songs) = pickle.load(f_in)
+            (self.dataset, self.artists_codes, self.codes_artists, self.songs_artists, self.songs_albums,
+             self.songs_num_in_album, self.songs_codes, self.codes_songs) = pickle.load(f_in)
 
         return
 
-    def _slice_spectrogram(self, mel: np.array, slice_length: int = 900, overlap: int = 100) -> np.array:
+    @staticmethod
+    def _slice_spectrogram(mel: np.array, slice_length: int = 900, overlap: int = 100) -> np.array:
         """
         Slice one spectrogram to parts
 
@@ -137,6 +138,9 @@ class DataHolder:
         set_artists = []
         set_names = []
 
+        if songs is not None and albums is not None:
+            raise RuntimeError("Songs and albums arguments are not None simultaneously!")
+
         if songs is not None:
             for song in songs:
                 artist = self.songs_artists[song]
@@ -146,7 +150,7 @@ class DataHolder:
 
                 num_of_parts = sliced_mel.shape[0]
 
-                if num_of_parts != 0: # Throw out songs shorter than one window
+                if num_of_parts != 0:  # Throw out songs shorter than one window
                     sliced_set.append(sliced_mel)
                     set_artists += [data[1]] * num_of_parts
                     set_names += [data[2]] * num_of_parts
@@ -164,11 +168,11 @@ class DataHolder:
                             set_artists += [song_data[1]] * num_of_parts
                             set_names += [song_data[2]] * num_of_parts
         else:
-            print("Songs and albums arguments are not None simultaneously!") # ??
+            raise RuntimeError("Songs and albums arguments are None simultaneously!")
 
         sliced_set = np.concatenate(sliced_set, axis=0)
 
-        return (sliced_set, np.array(set_artists), np.array(set_names))
+        return sliced_set, np.array(set_artists), np.array(set_names)
 
     def get_song_split(self,
                        test_size: float = 0.1,
@@ -188,7 +192,6 @@ class DataHolder:
         Y - np.array(shape=[samples,]) - int
         names - names of songs
         """
-        # TODO create the same part of code with album split and move to new private method
 
         stratified_split_test = StratifiedShuffleSplit(n_splits=2, test_size=test_size, random_state=self.random_state)
         stratified_split_val = StratifiedShuffleSplit(n_splits=2, test_size=val_size, random_state=self.random_state)
@@ -199,7 +202,7 @@ class DataHolder:
 
         for full_train_indices, test_indices in stratified_split_test.split(songs_arr, artists_arr):
             for train_indices, val_indices in\
-            stratified_split_val.split(songs_arr[full_train_indices], artists_arr[full_train_indices]):
+                    stratified_split_val.split(songs_arr[full_train_indices], artists_arr[full_train_indices]):
                 break
             break
 
@@ -232,8 +235,6 @@ class DataHolder:
         names - names of songs
         """
 
-        np.random.seed(self.random_state) ################ ??????
-
         train_albums_dict = {}
         val_albums_dict = {}
         test_albums_dict = {}
@@ -241,7 +242,7 @@ class DataHolder:
         for artist in self.dataset.keys():
             albums = np.array(list(self.dataset[artist].keys()))
             num_of_albums = albums.shape[0]
-            special_numbers = np.random.permutation(num_of_albums)
+            special_numbers = np.random.RandomState(seed=self.random_state).permutation(num_of_albums)
             train_numbers = special_numbers[val_albums_num + test_albums_num:]
             val_numbers = special_numbers[:val_albums_num]
             test_numbers = special_numbers[val_albums_num: val_albums_num + test_albums_num]
